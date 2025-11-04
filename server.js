@@ -104,4 +104,67 @@ app.get("/api/attendance/history/:userId", verifyToken, (req, res) => {
   res.json({ history });
 });
 
+// == analisis kehadiran siswa ==
+app.get("/api/attendance/analysis/:userId", verifyToken, (req, res) => {
+  const { month } = req.query; // contoh ?month=2025-11
+  const userId = req.params.userId;
+
+  const userAttendances = attendances.filter(
+    (a) => a.userId == userId && (!month || a.date.startsWith(month))
+  );
+
+  if (userAttendances.length === 0)
+    return res.json({
+      message: "Tidak ada data presensi untuk user/bulan ini.",
+    });
+
+  const summary = { hadir: 0, sakit: 0, izin: 0, alpha: 0 };
+  userAttendances.forEach((a) => {
+    const key = a.status.toLowerCase();
+    if (summary[key] !== undefined) summary[key]++;
+  });
+
+  const total = userAttendances.length;
+  const persentaseHadir = ((summary.hadir / total) * 100).toFixed(2);
+
+  res.json({
+    userId,
+    month: month || "Semua bulan",
+    totalPresensi: total,
+    rekap: summary,
+    persentaseHadir: `${persentaseHadir}%`,
+  });
+});
+
+// == analisis kehadiran per kelas ==
+app.get("/api/attendance/kelas/:kelas", verifyToken, (req, res) => {
+  const { kelas } = req.params;
+  const siswaKelas = users.filter((u) => u.kelas === kelas);
+
+  if (siswaKelas.length === 0)
+    return res.status(404).json({ message: "Tidak ada siswa di kelas ini" });
+
+  const hasil = siswaKelas.map((u) => {
+    const dataUser = attendances.filter((a) => a.userId === u.id);
+    const rekap = { hadir: 0, sakit: 0, izin: 0, alpha: 0 };
+    dataUser.forEach((a) => {
+      const s = a.status.toLowerCase();
+      if (rekap[s] !== undefined) rekap[s]++;
+    });
+    const total = dataUser.length;
+    const persentase = total
+      ? ((rekap.hadir / total) * 100).toFixed(2)
+      : "0.00";
+    return {
+      nama: u.name,
+      nis: u.nis,
+      kelas: u.kelas,
+      rekap,
+      persentaseHadir: `${persentase}%`,
+    };
+  });
+
+  res.json({ kelas, hasil });
+});
+
 app.listen(PORT, () => console.log(`Server jalan di http://localhost:${PORT}`));
